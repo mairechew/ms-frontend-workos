@@ -122,7 +122,6 @@ Leave a comment and raise it in review:
 // 🚩 OVERENGINEERING CHECK: This factory pattern was added for future plugin support
 // that isn't on the roadmap. Consider simplifying to a plain function until needed.
 ```
-
 Prefer: boring code that works over clever code that impresses. [Rule of Three](https://en.wikipedia.org/wiki/Rule_of_three_(computer_programming)) — abstract on the third repetition, not the first.
 
 ### 6. QA Agent — 🤖 Functionality, Edge Cases & Playwright Tests

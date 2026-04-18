@@ -1,165 +1,119 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
-  Table, Avatar, Badge, Flex, Text, Spinner,
-  Callout, Dialog, Button, TextField, Select,
+  Table, Avatar, Flex, Text, Spinner, Callout,
+  Button, TextField, DropdownMenu, IconButton, Box,
 } from '@radix-ui/themes'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { PlusIcon, DotsHorizontalIcon, MagnifyingGlassIcon } from '@radix-ui/react-icons'
 import { useUsers } from './hooks/useUsers'
 import { useRoles } from '../roles/hooks/useRoles'
-import { API_BASE } from '../../config'
+import AddUserDialog from './components/AddUserDialog'
+import EditUserDialog from './components/EditUserDialog'
+import Pagination from '../../components/Pagination'
+import type { User } from '../../types/api'
+
+const PAGE_SIZE = 10
 
 interface Props {
-  search: string
-  addOpen: boolean
-  onAddOpenChange: (open: boolean) => void
+  compact: boolean
 }
 
-export default function Users({ search, addOpen, onAddOpenChange }: Props) {
-  const queryClient = useQueryClient()
-  const usersQuery = useUsers()
-  const rolesQuery = useRoles()
+export default function Users({ compact }: Props) {
+  const { data, isLoading, isError, deleteUser } = useUsers()
+  const { data: roles } = useRoles()
 
-  const [first, setFirst] = useState('')
-  const [last, setLast] = useState('')
-  const [roleId, setRoleId] = useState('')
+  const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const [addOpen, setAddOpen] = useState(false)
+  const [editingUser, setEditingUser] = useState<User | null>(null)
+
+  useEffect(() => setPage(1), [search])
 
   const roleMap = useMemo(
-    () => new Map(rolesQuery.data?.map(r => [r.id, r]) ?? []),
-    [rolesQuery.data]
+    () => new Map(roles?.map(r => [r.id, r]) ?? []),
+    [roles]
   )
 
   const filtered = useMemo(() => {
-    if (!usersQuery.data) return []
+    if (!data) return []
     const q = search.toLowerCase()
-    if (!q) return usersQuery.data
-    return usersQuery.data.filter(
+    if (!q) return data
+    return data.filter(
       u => u.first.toLowerCase().includes(q) || u.last.toLowerCase().includes(q)
     )
-  }, [usersQuery.data, search])
+  }, [data, search])
 
-  const addUser = useMutation({
-    mutationFn: (body: { first: string; last: string; roleId: string }) =>
-      fetch(`${API_BASE}/users`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      }).then(r => {
-        if (!r.ok) throw new Error('Failed to add user')
-        return r.json()
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users'] })
-      onAddOpenChange(false)
-      setFirst('')
-      setLast('')
-      setRoleId('')
-    },
-  })
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
-  if (usersQuery.isLoading) {
-    return (
-      <Flex justify="center" p="8">
-        <Spinner size="3" />
-      </Flex>
-    )
-  }
-
-  if (usersQuery.isError) {
-    return (
-      <Callout.Root color="red" mt="4">
-        <Callout.Text>Failed to load users. Please try again.</Callout.Text>
-      </Callout.Root>
-    )
-  }
+  if (isLoading) return <Flex justify="center" p="8"><Spinner size="3" /></Flex>
+  if (isError) return (
+    <Callout.Root color="red" mt="4">
+      <Callout.Text>Failed to load users. Please try again.</Callout.Text>
+    </Callout.Root>
+  )
 
   return (
     <>
-      <Table.Root>
-        <Table.Header>
-          <Table.Row>
-            <Table.ColumnHeaderCell>Name</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>Role</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>Created</Table.ColumnHeaderCell>
-          </Table.Row>
-        </Table.Header>
-        <Table.Body>
-          {filtered.map(user => (
-            <Table.Row key={user.id}>
-              <Table.Cell>
-                <Flex align="center" gap="2">
-                  <Avatar
-                    src={user.photo}
-                    fallback={user.first[0]}
-                    size="1"
-                    radius="full"
-                  />
-                  <Text>{user.first} {user.last}</Text>
-                </Flex>
-              </Table.Cell>
-              <Table.Cell>
-                {roleMap.get(user.roleId)?.name ?? '—'}
-              </Table.Cell>
-              <Table.Cell>
-                {new Date(user.createdAt).toLocaleDateString()}
-              </Table.Cell>
-            </Table.Row>
-          ))}
-        </Table.Body>
-      </Table.Root>
+      <Flex gap="3" align="center" mt="4" mb="4">
+        <TextField.Root
+          placeholder="Search by name..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          style={{ flex: 1 }}
+        >
+          <TextField.Slot>
+            <MagnifyingGlassIcon />
+          </TextField.Slot>
+        </TextField.Root>
+        <Button onClick={() => setAddOpen(true)}>
+          <PlusIcon /> Add user
+        </Button>
+      </Flex>
 
-      <Dialog.Root open={addOpen} onOpenChange={onAddOpenChange}>
-        <Dialog.Content size="4" maxWidth="480px">
-          <Dialog.Title>Add user</Dialog.Title>
-          <Flex direction="column" gap="4" mt="4">
-            <label>
-              <Text as="div" size="2" mb="1" weight="medium">First name</Text>
-              <TextField.Root
-                value={first}
-                onChange={e => setFirst(e.target.value)}
-                placeholder="First name"
-              />
-            </label>
-            <label>
-              <Text as="div" size="2" mb="1" weight="medium">Last name</Text>
-              <TextField.Root
-                value={last}
-                onChange={e => setLast(e.target.value)}
-                placeholder="Last name"
-              />
-            </label>
-            <Flex direction="column" gap="1">
-              <Text size="2" weight="medium">Role</Text>
-              <Select.Root value={roleId} onValueChange={setRoleId}>
-                <Select.Trigger placeholder="Select a role" />
-                <Select.Content>
-                  {rolesQuery.data?.map(role => (
-                    <Select.Item key={role.id} value={role.id}>
-                      {role.name}
-                    </Select.Item>
-                  ))}
-                </Select.Content>
-              </Select.Root>
-            </Flex>
-            {addUser.isError && (
-              <Callout.Root color="red">
-                <Callout.Text>Failed to add user. Please try again.</Callout.Text>
-              </Callout.Root>
-            )}
-            <Flex gap="3" justify="end" mt="2">
-              <Dialog.Close>
-                <Button variant="soft" color="gray">Cancel</Button>
-              </Dialog.Close>
-              <Button
-                onClick={() => addUser.mutate({ first, last, roleId })}
-                disabled={!first || !last || !roleId}
-                loading={addUser.isPending}
-              >
-                Add user
-              </Button>
-            </Flex>
-          </Flex>
-        </Dialog.Content>
-      </Dialog.Root>
+      <Box style={{ border: '1px solid var(--gray-a5)', borderRadius: 'var(--radius-3)', overflow: 'hidden' }}>
+        <Table.Root size={compact ? '1' : '2'}>
+          <Table.Header>
+            <Table.Row>
+              <Table.ColumnHeaderCell>User</Table.ColumnHeaderCell>
+              <Table.ColumnHeaderCell>Role</Table.ColumnHeaderCell>
+              <Table.ColumnHeaderCell>Joined</Table.ColumnHeaderCell>
+              <Table.ColumnHeaderCell />
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
+            {paginated.map(user => (
+              <Table.Row key={user.id}>
+                <Table.Cell>
+                  <Flex align="center" gap="2">
+                    {!compact && <Avatar src={user.photo} fallback={user.first[0]} size="1" radius="full" />}
+                    <Text>{user.first} {user.last}</Text>
+                  </Flex>
+                </Table.Cell>
+                <Table.Cell>{roleMap.get(user.roleId)?.name ?? '—'}</Table.Cell>
+                <Table.Cell>{new Date(user.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</Table.Cell>
+                <Table.Cell justify="end">
+                  <DropdownMenu.Root>
+                    <DropdownMenu.Trigger>
+                      <IconButton variant="ghost" color="gray" size="1" aria-label="More options">
+                        <DotsHorizontalIcon />
+                      </IconButton>
+                    </DropdownMenu.Trigger>
+                    <DropdownMenu.Content align="end">
+                      <DropdownMenu.Item onClick={() => setEditingUser(user)}>Edit user</DropdownMenu.Item>
+                      <DropdownMenu.Separator />
+                      <DropdownMenu.Item color="red" onClick={() => deleteUser.mutate(user.id)}>Delete user</DropdownMenu.Item>
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Root>
+                </Table.Cell>
+              </Table.Row>
+            ))}
+          </Table.Body>
+        </Table.Root>
+        <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
+      </Box>
+
+      <AddUserDialog open={addOpen} onClose={() => setAddOpen(false)} />
+      <EditUserDialog user={editingUser} onClose={() => setEditingUser(null)} />
     </>
   )
 }

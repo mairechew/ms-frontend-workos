@@ -1,151 +1,116 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
-  Table, Badge, Flex, Text, Spinner,
-  Callout, Dialog, Button, TextField, Checkbox,
+  Table, Badge, Flex, Text, Spinner, Callout,
+  Button, TextField, DropdownMenu, IconButton, Box,
 } from '@radix-ui/themes'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { PlusIcon, DotsHorizontalIcon, MagnifyingGlassIcon } from '@radix-ui/react-icons'
 import { useRoles } from './hooks/useRoles'
-import { API_BASE } from '../../config'
+import AddRoleDialog from './components/AddRoleDialog'
+import EditRoleDialog from './components/EditRoleDialog'
+import Pagination from '../../components/Pagination'
+import type { Role } from '../../types/api'
+
+const PAGE_SIZE = 10
 
 interface Props {
-  search: string
-  addOpen: boolean
-  onAddOpenChange: (open: boolean) => void
+  compact: boolean
 }
 
-export default function Roles({ search, addOpen, onAddOpenChange }: Props) {
-  const queryClient = useQueryClient()
-  const rolesQuery = useRoles()
+export default function Roles({ compact }: Props) {
+  const { data, isLoading, isError, deleteRole } = useRoles()
 
-  const [name, setName] = useState('')
-  const [description, setDescription] = useState('')
-  const [isDefault, setIsDefault] = useState(false)
+  const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const [addOpen, setAddOpen] = useState(false)
+  const [editingRole, setEditingRole] = useState<Role | null>(null)
+
+  useEffect(() => setPage(1), [search])
 
   const filtered = useMemo(() => {
-    if (!rolesQuery.data) return []
+    if (!data) return []
     const q = search.toLowerCase()
-    if (!q) return rolesQuery.data
-    return rolesQuery.data.filter(
-      r =>
-        r.name.toLowerCase().includes(q) ||
-        (r.description?.toLowerCase().includes(q) ?? false)
+    if (!q) return data
+    return data.filter(
+      r => r.name.toLowerCase().includes(q) || (r.description?.toLowerCase().includes(q) ?? false)
     )
-  }, [rolesQuery.data, search])
+  }, [data, search])
 
-  const addRole = useMutation({
-    mutationFn: (body: { name: string; description: string; isDefault: boolean }) =>
-      fetch(`${API_BASE}/roles`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      }).then(r => {
-        if (!r.ok) throw new Error('Failed to add role')
-        return r.json()
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['roles'] })
-      onAddOpenChange(false)
-      setName('')
-      setDescription('')
-      setIsDefault(false)
-    },
-  })
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
-  if (rolesQuery.isLoading) {
-    return (
-      <Flex justify="center" p="8">
-        <Spinner size="3" />
-      </Flex>
-    )
-  }
-
-  if (rolesQuery.isError) {
-    return (
-      <Callout.Root color="red" mt="4">
-        <Callout.Text>Failed to load roles. Please try again.</Callout.Text>
-      </Callout.Root>
-    )
-  }
+  if (isLoading) return <Flex justify="center" p="8"><Spinner size="3" /></Flex>
+  if (isError) return (
+    <Callout.Root color="red" mt="4">
+      <Callout.Text>Failed to load roles. Please try again.</Callout.Text>
+    </Callout.Root>
+  )
 
   return (
     <>
-      <Table.Root>
-        <Table.Header>
-          <Table.Row>
-            <Table.ColumnHeaderCell>Name</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>Description</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>Created</Table.ColumnHeaderCell>
-          </Table.Row>
-        </Table.Header>
-        <Table.Body>
-          {filtered.map(role => (
-            <Table.Row key={role.id}>
-              <Table.Cell>
-                <Flex align="center" gap="2">
-                  <Text>{role.name}</Text>
-                  {role.isDefault && <Badge color="green">Default</Badge>}
-                </Flex>
-              </Table.Cell>
-              <Table.Cell>
-                <Text color="gray">{role.description ?? '—'}</Text>
-              </Table.Cell>
-              <Table.Cell>
-                {new Date(role.createdAt).toLocaleDateString()}
-              </Table.Cell>
-            </Table.Row>
-          ))}
-        </Table.Body>
-      </Table.Root>
+      <Flex gap="3" align="center" mt="4" mb="4">
+        <TextField.Root
+          placeholder="Search by name or description..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          style={{ flex: 1 }}
+        >
+          <TextField.Slot>
+            <MagnifyingGlassIcon />
+          </TextField.Slot>
+        </TextField.Root>
+        <Button onClick={() => setAddOpen(true)}>
+          <PlusIcon /> Add role
+        </Button>
+      </Flex>
 
-      <Dialog.Root open={addOpen} onOpenChange={onAddOpenChange}>
-        <Dialog.Content size="4" maxWidth="480px">
-          <Dialog.Title>Add role</Dialog.Title>
-          <Flex direction="column" gap="4" mt="4">
-            <label>
-              <Text as="div" size="2" mb="1" weight="medium">Name</Text>
-              <TextField.Root
-                value={name}
-                onChange={e => setName(e.target.value)}
-                placeholder="Role name"
-              />
-            </label>
-            <label>
-              <Text as="div" size="2" mb="1" weight="medium">Description</Text>
-              <TextField.Root
-                value={description}
-                onChange={e => setDescription(e.target.value)}
-                placeholder="Optional description"
-              />
-            </label>
-            <Text as="label" size="2" weight="medium">
-              <Flex gap="2" align="center">
-                <Checkbox
-                  checked={isDefault}
-                  onCheckedChange={checked => setIsDefault(checked === true)}
-                />
-                Set as default role
-              </Flex>
-            </Text>
-            {addRole.isError && (
-              <Callout.Root color="red">
-                <Callout.Text>Failed to add role. Please try again.</Callout.Text>
-              </Callout.Root>
-            )}
-            <Flex gap="3" justify="end" mt="2">
-              <Dialog.Close>
-                <Button variant="soft" color="gray">Cancel</Button>
-              </Dialog.Close>
-              <Button
-                onClick={() => addRole.mutate({ name, description, isDefault })}
-                disabled={!name}
-                loading={addRole.isPending}
-              >
-                Add role
-              </Button>
-            </Flex>
-          </Flex>
-        </Dialog.Content>
-      </Dialog.Root>
+      <Box style={{ border: '1px solid var(--gray-a5)', borderRadius: 'var(--radius-3)', overflow: 'hidden' }}>
+        <Table.Root size={compact ? '1' : '2'}>
+          <Table.Header>
+            <Table.Row>
+              <Table.ColumnHeaderCell>Role</Table.ColumnHeaderCell>
+              <Table.ColumnHeaderCell>Description</Table.ColumnHeaderCell>
+              <Table.ColumnHeaderCell>Created</Table.ColumnHeaderCell>
+              <Table.ColumnHeaderCell />
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
+            {paginated.map(role => (
+              <Table.Row key={role.id}>
+                <Table.Cell>
+                  <Flex align="center" gap="2">
+                    <Text>{role.name}</Text>
+                    {role.isDefault && <Badge color="green">Default</Badge>}
+                  </Flex>
+                </Table.Cell>
+                <Table.Cell>
+                  <Text color="gray">{role.description ?? '—'}</Text>
+                </Table.Cell>
+                <Table.Cell>{new Date(role.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</Table.Cell>
+                <Table.Cell justify="end">
+                  <DropdownMenu.Root>
+                    <DropdownMenu.Trigger>
+                      <IconButton variant="ghost" color="gray" size="1" aria-label="More options">
+                        <DotsHorizontalIcon />
+                      </IconButton>
+                    </DropdownMenu.Trigger>
+                    <DropdownMenu.Content align="end">
+                      <DropdownMenu.Item onClick={() => setEditingRole(role)}>Edit role</DropdownMenu.Item>
+                      <DropdownMenu.Separator />
+                      <DropdownMenu.Item color="red" disabled={role.isDefault} onClick={() => deleteRole.mutate(role.id)}>
+                        Delete role
+                      </DropdownMenu.Item>
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Root>
+                </Table.Cell>
+              </Table.Row>
+            ))}
+          </Table.Body>
+        </Table.Root>
+        <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
+      </Box>
+
+      <AddRoleDialog open={addOpen} onClose={() => setAddOpen(false)} />
+      <EditRoleDialog role={editingRole} onClose={() => setEditingRole(null)} />
     </>
   )
 }

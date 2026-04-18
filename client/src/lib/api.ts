@@ -1,6 +1,18 @@
 import { API_BASE } from '../config'
 import type { PagedData } from '../types/api'
 
+export async function apiFetch<T = unknown>(route: string, options?: RequestInit): Promise<T> {
+  const r = await fetch(`${API_BASE}${route}`, {
+    headers: { 'Content-Type': 'application/json' },
+    ...options,
+  })
+  if (!r.ok) {
+    const body = await r.json().catch(() => null)
+    throw new Error(body?.message ?? `Request failed: ${r.status}`)
+  }
+  return r.json()
+}
+
 export async function fetchAllPages<T>(route: string, errorMessage: string): Promise<T[]> {
   const res = await fetch(`${API_BASE}${route}`)
   if (!res.ok) throw new Error(errorMessage)
