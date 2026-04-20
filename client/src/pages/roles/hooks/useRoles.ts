@@ -24,9 +24,18 @@ export function useRoles() {
   })
 
   const deleteRole = useMutation({
-    mutationFn: (id: string) =>
-      apiFetch(`/roles/${id}`, { method: 'DELETE' }),
-    onSuccess: invalidate,
+    mutationFn: (id: string) => apiFetch(`/roles/${id}`, { method: 'DELETE' }),
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ['roles'] })
+      const previous = queryClient.getQueryData<Role[]>(['roles'])
+      // optimistic delete - maybe add some sort of shimmer?
+      queryClient.setQueryData<Role[]>(['roles'], old => old?.filter(r => r.id !== id) ?? [])
+      return { previous }
+    },
+    onError: (_err, _id, context) => {
+      if (context?.previous) queryClient.setQueryData(['roles'], context.previous)
+    },
+    onSettled: invalidate,
   })
 
   return { ...query, addRole, editRole, deleteRole }

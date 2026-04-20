@@ -81,6 +81,17 @@ export default function Users({ compact }: Props) {
             </Table.Row>
           </Table.Header>
           <Table.Body>
+            {paginated.length === 0 && (
+              <Table.Row>
+                <Table.Cell colSpan={4}>
+                  <Flex justify="center" py="8">
+                    <Text color="gray" size="2">
+                      {search ? `No users match "${search}"` : 'No users yet'}
+                    </Text>
+                  </Flex>
+                </Table.Cell>
+              </Table.Row>
+            )}
             {paginated.map(user => (
               <Table.Row key={user.id}>
                 <Table.Cell>

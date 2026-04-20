@@ -1,48 +1,75 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Table, Badge, Flex, Text, Spinner, Callout,
-  Button, TextField, DropdownMenu, IconButton, Box,
+  Table, Badge, Flex, Text, Button, TextField,
+  DropdownMenu, IconButton, Box,
 } from '@radix-ui/themes'
-import { PlusIcon, DotsHorizontalIcon, MagnifyingGlassIcon } from '@radix-ui/react-icons'
-import { useRoles } from './hooks/useRoles'
-import AddRoleDialog from './components/AddRoleDialog'
-import EditRoleDialog from './components/EditRoleDialog'
-import Pagination from '../../components/Pagination'
-import type { Role } from '../../types/api'
+import {
+  PlusIcon, DotsHorizontalIcon, MagnifyingGlassIcon,
+  ArrowUpIcon, ArrowDownIcon, CaretSortIcon,
+} from '@radix-ui/react-icons'
+import Pagination from '../../../components/Pagination'
+import type { Role } from '../../../types/api'
+
+type SortField = 'name' | 'description' | 'created'
+type SortDir = 'asc' | 'desc'
+type Sort = { field: SortField; dir: SortDir } | null
+
+interface Props {
+  data: Role[]
+  compact: boolean
+  onEdit: (role: Role) => void
+  onDelete: (id: string) => void
+  onAdd: () => void
+}
 
 const PAGE_SIZE = 10
 
-interface Props {
-  compact: boolean
+function SortIndicator({ field, sort }: { field: SortField; sort: Sort }) {
+  if (sort?.field !== field) return <CaretSortIcon style={{ opacity: 0.4 }} />
+  return sort.dir === 'asc' ? <ArrowUpIcon /> : <ArrowDownIcon />
 }
 
-export default function Roles({ compact }: Props) {
-  const { data, isLoading, isError, deleteRole } = useRoles()
-
+export default function RolesTable({ data, compact, onEdit, onDelete, onAdd }: Props) {
   const [search, setSearch] = useState('')
+  const [sort, setSort] = useState<Sort>(null)
   const [page, setPage] = useState(1)
-  const [addOpen, setAddOpen] = useState(false)
-  const [editingRole, setEditingRole] = useState<Role | null>(null)
 
-  useEffect(() => setPage(1), [search])
+  useEffect(() => setPage(1), [search, sort])
+
+  function handleSort(field: SortField) {
+    setSort(prev => {
+      if (!prev || prev.field !== field) return { field, dir: 'asc' }
+      if (prev.dir === 'asc') return { field, dir: 'desc' }
+      return null
+    })
+  }
 
   const filtered = useMemo(() => {
-    if (!data) return []
     const q = search.toLowerCase()
     if (!q) return data
-    return data.filter(
-      r => r.name.toLowerCase().includes(q) || (r.description?.toLowerCase().includes(q) ?? false)
+    return data.filter(r =>
+      r.name.toLowerCase().includes(q) || (r.description?.toLowerCase().includes(q) ?? false)
     )
   }, [data, search])
 
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
-  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const sorted = useMemo(() => {
+    if (!sort) return filtered
+    return [...filtered].sort((a, b) => {
+      let aVal = '', bVal = ''
+      if (sort.field === 'name') { aVal = a.name; bVal = b.name }
+      else if (sort.field === 'description') { aVal = a.description ?? ''; bVal = b.description ?? '' }
+      else { aVal = a.createdAt; bVal = b.createdAt }
+      return sort.dir === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal)
+    })
+  }, [filtered, sort])
 
-  if (isLoading) return <Flex justify="center" p="8"><Spinner size="3" /></Flex>
-  if (isError) return (
-    <Callout.Root color="red" mt="4">
-      <Callout.Text>Failed to load roles. Please try again.</Callout.Text>
-    </Callout.Root>
+  const totalPages = Math.ceil(sorted.length / PAGE_SIZE)
+  const paginated = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+
+  const headerCell = (label: string, field: SortField) => (
+    <Table.ColumnHeaderCell onClick={() => handleSort(field)} style={{ cursor: 'pointer', userSelect: 'none' }}>
+      <Flex align="center" gap="1">{label} <SortIndicator field={field} sort={sort} /></Flex>
+    </Table.ColumnHeaderCell>
   )
 
   return (
@@ -54,22 +81,18 @@ export default function Roles({ compact }: Props) {
           onChange={e => setSearch(e.target.value)}
           style={{ flex: 1 }}
         >
-          <TextField.Slot>
-            <MagnifyingGlassIcon />
-          </TextField.Slot>
+          <TextField.Slot><MagnifyingGlassIcon /></TextField.Slot>
         </TextField.Root>
-        <Button onClick={() => setAddOpen(true)}>
-          <PlusIcon /> Add role
-        </Button>
+        <Button onClick={onAdd}><PlusIcon /> Add role</Button>
       </Flex>
 
       <Box style={{ border: '1px solid var(--gray-a5)', borderRadius: 'var(--radius-3)', overflow: 'hidden' }}>
         <Table.Root size={compact ? '1' : '2'}>
           <Table.Header>
             <Table.Row>
-              <Table.ColumnHeaderCell>Role</Table.ColumnHeaderCell>
-              <Table.ColumnHeaderCell>Description</Table.ColumnHeaderCell>
-              <Table.ColumnHeaderCell>Created</Table.ColumnHeaderCell>
+              {headerCell('Role', 'name')}
+              {headerCell('Description', 'description')}
+              {headerCell('Created', 'created')}
               <Table.ColumnHeaderCell />
             </Table.Row>
           </Table.Header>
@@ -105,9 +128,9 @@ export default function Roles({ compact }: Props) {
                       </IconButton>
                     </DropdownMenu.Trigger>
                     <DropdownMenu.Content align="end">
-                      <DropdownMenu.Item onClick={() => setEditingRole(role)}>Edit role</DropdownMenu.Item>
+                      <DropdownMenu.Item onClick={() => onEdit(role)}>Edit role</DropdownMenu.Item>
                       <DropdownMenu.Separator />
-                      <DropdownMenu.Item color="red" disabled={role.isDefault} onClick={() => deleteRole.mutate(role.id)}>
+                      <DropdownMenu.Item color="red" disabled={role.isDefault} onClick={() => onDelete(role.id)}>
                         Delete role
                       </DropdownMenu.Item>
                     </DropdownMenu.Content>
@@ -119,9 +142,6 @@ export default function Roles({ compact }: Props) {
         </Table.Root>
         <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
       </Box>
-
-      <AddRoleDialog open={addOpen} onClose={() => setAddOpen(false)} />
-      <EditRoleDialog role={editingRole} onClose={() => setEditingRole(null)} />
     </>
   )
 }

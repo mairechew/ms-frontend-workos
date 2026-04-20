@@ -24,9 +24,19 @@ export function useUsers() {
   })
 
   const deleteUser = useMutation({
-    mutationFn: (id: string) =>
-      apiFetch(`/users/${id}`, { method: 'DELETE' }),
-    onSuccess: invalidate,
+    mutationFn: (id: string) => apiFetch(`/users/${id}`, { method: 'DELETE' }),
+
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ['users'] })
+      const previous = queryClient.getQueryData<User[]>(['users'])
+      // optimistic delete
+      queryClient.setQueryData<User[]>(['users'], old => old?.filter(u => u.id !== id) ?? [])
+      return { previous }
+    },
+    onError: (_err, _id, context) => {
+      if (context?.previous) queryClient.setQueryData(['users'], context.previous)
+    },
+    onSettled: invalidate,
   })
 
   return { ...query, addUser, editUser, deleteUser }
