@@ -30,7 +30,8 @@ export default function App() {
   return (
     <Theme appearance={appearance} accentColor="violet"> 
       <ToastProvider>
-        <Box p="6">
+        <main>
+          <Box p="6">
           <Flex justify="end" mb="4">
             <IconButton
               variant="ghost"
@@ -54,7 +55,8 @@ export default function App() {
             <Tabs.Content value="users"><ErrorBoundary><Users /></ErrorBoundary></Tabs.Content>
             <Tabs.Content value="roles"><ErrorBoundary><Roles /></ErrorBoundary></Tabs.Content>
           </Tabs.Root>
-        </Box>
+          </Box>
+        </main>
       </ToastProvider>
     </Theme>
   )

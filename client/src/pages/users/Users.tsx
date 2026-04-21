@@ -37,7 +37,8 @@ export default function Users() {
       sortValue: u => `${u.first} ${u.last}`,
       render: (u, compact) => (
         <Flex align="center" gap="2">
-          {!compact && <Avatar src={u.photo} fallback={u.first[0]} size="1" radius="full" />}
+          {/* pravatar defaults to 400px; request 48px (2× retina for size="1") */}
+          {!compact && <Avatar src={u.photo?.replace(/\/\d+\?/, '/48?')} fallback={u.first[0]} size="1" radius="full" alt="" />}
           <Text>{u.first} {u.last}</Text>
         </Flex>
       ),
