@@ -1,49 +1,60 @@
-import { useEffect, useMemo, useState } from 'react'
-import {
-  Table, Avatar, Flex, Text, Spinner, Callout,
-  Button, TextField, DropdownMenu, IconButton, Box,
-} from '@radix-ui/themes'
-import { PlusIcon, DotsHorizontalIcon, MagnifyingGlassIcon } from '@radix-ui/react-icons'
+import { useCallback, useMemo, useState } from 'react'
+import { Flex, Spinner, Callout, Avatar, Text } from '@radix-ui/themes'
 import { useUsers } from './hooks/useUsers'
 import { useRoles } from '../roles/hooks/useRoles'
-import AddUserDialog from './components/AddUserDialog'
-import EditUserDialog from './components/EditUserDialog'
-import Pagination from '../../components/Pagination'
+import { useToast } from '../../components/ToastProvider'
+import DataTable, { type Column } from '../../components/DataTable'
+import ConfirmDeleteDialog from '../../components/ConfirmDeleteDialog'
+import { TABLE_PARAMS } from '../../lib/constants'
+import UserDialog from './components/UserDialog'
 import type { User } from '../../types/api'
 
-const PAGE_SIZE = 10
-
-interface Props {
-  compact: boolean
-}
-
-export default function Users({ compact }: Props) {
-  const { data, isLoading, isError, deleteUser } = useUsers()
+export default function Users() {
+  const { data, isLoading, isError, scheduleDelete } = useUsers()
   const { data: roles } = useRoles()
+  const showToast = useToast()
+  const [dialog, setDialog] = useState<{ open: boolean; user: User | null }>({ open: false, user: null })
+  const [confirmDelete, setConfirmDelete] = useState<User | null>(null)
 
-  const [search, setSearch] = useState('')
-  const [page, setPage] = useState(1)
-  const [addOpen, setAddOpen] = useState(false)
-  const [editingUser, setEditingUser] = useState<User | null>(null)
+  const roleMap = useMemo(() => new Map(roles?.map(r => [r.id, r]) ?? []), [roles])
 
-  useEffect(() => setPage(1), [search])
+  const getSearchText = useCallback((u: User) => `${u.first} ${u.last}`, [])
 
-  const roleMap = useMemo(
-    () => new Map(roles?.map(r => [r.id, r]) ?? []),
-    [roles]
-  )
+  const handleDelete = (user: User) => {
+    const undo = scheduleDelete(user.id, () => {
+      showToast({ title: `Could not delete ${user.first} ${user.last}` })
+    })
+    showToast({
+      title: `${user.first} ${user.last} deleted`,
+      action: { label: 'Undo', onClick: undo },
+    })
+  }
 
-  const filtered = useMemo(() => {
-    if (!data) return []
-    const q = search.toLowerCase()
-    if (!q) return data
-    return data.filter(
-      u => u.first.toLowerCase().includes(q) || u.last.toLowerCase().includes(q)
-    )
-  }, [data, search])
-
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
-  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const columns = useMemo<Column<User>[]>(() => [
+    {
+      label: 'User',
+      sortKey: 'name',
+      sortValue: u => `${u.first} ${u.last}`,
+      render: (u, compact) => (
+        <Flex align="center" gap="2">
+          {!compact && <Avatar src={u.photo} fallback={u.first[0]} size="1" radius="full" />}
+          <Text>{u.first} {u.last}</Text>
+        </Flex>
+      ),
+    },
+    {
+      label: 'Role',
+      sortKey: 'role',
+      sortValue: u => roleMap.get(u.roleId)?.name ?? '',
+      render: u => roleMap.get(u.roleId)?.name ?? '—',
+    },
+    {
+      label: 'Joined',
+      sortKey: 'joined',
+      sortValue: u => u.createdAt,
+      render: u => new Date(u.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+    },
+  ], [roleMap])
 
   if (isLoading) return <Flex justify="center" p="8"><Spinner size="3" /></Flex>
   if (isError) return (
@@ -54,77 +65,32 @@ export default function Users({ compact }: Props) {
 
   return (
     <>
-      <Flex gap="3" align="center" mt="4" mb="4">
-        <TextField.Root
-          placeholder="Search by name..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          style={{ flex: 1 }}
-        >
-          <TextField.Slot>
-            <MagnifyingGlassIcon />
-          </TextField.Slot>
-        </TextField.Root>
-        <Button onClick={() => setAddOpen(true)}>
-          <PlusIcon /> Add user
-        </Button>
-      </Flex>
-
-      <Box style={{ border: '1px solid var(--gray-a5)', borderRadius: 'var(--radius-3)', overflow: 'hidden' }}>
-        <Table.Root size={compact ? '1' : '2'}>
-          <Table.Header>
-            <Table.Row>
-              <Table.ColumnHeaderCell>User</Table.ColumnHeaderCell>
-              <Table.ColumnHeaderCell>Role</Table.ColumnHeaderCell>
-              <Table.ColumnHeaderCell>Joined</Table.ColumnHeaderCell>
-              <Table.ColumnHeaderCell />
-            </Table.Row>
-          </Table.Header>
-          <Table.Body>
-            {paginated.length === 0 && (
-              <Table.Row>
-                <Table.Cell colSpan={4}>
-                  <Flex justify="center" py="8">
-                    <Text color="gray" size="2">
-                      {search ? `No users match "${search}"` : 'No users yet'}
-                    </Text>
-                  </Flex>
-                </Table.Cell>
-              </Table.Row>
-            )}
-            {paginated.map(user => (
-              <Table.Row key={user.id}>
-                <Table.Cell>
-                  <Flex align="center" gap="2">
-                    {!compact && <Avatar src={user.photo} fallback={user.first[0]} size="1" radius="full" />}
-                    <Text>{user.first} {user.last}</Text>
-                  </Flex>
-                </Table.Cell>
-                <Table.Cell>{roleMap.get(user.roleId)?.name ?? '—'}</Table.Cell>
-                <Table.Cell>{new Date(user.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</Table.Cell>
-                <Table.Cell justify="end">
-                  <DropdownMenu.Root>
-                    <DropdownMenu.Trigger>
-                      <IconButton variant="ghost" color="gray" size="1" aria-label="More options">
-                        <DotsHorizontalIcon />
-                      </IconButton>
-                    </DropdownMenu.Trigger>
-                    <DropdownMenu.Content align="end">
-                      <DropdownMenu.Item onClick={() => setEditingUser(user)}>Edit user</DropdownMenu.Item>
-                      <DropdownMenu.Separator />
-                      <DropdownMenu.Item color="red" onClick={() => deleteUser.mutate(user.id)}>Delete user</DropdownMenu.Item>
-                    </DropdownMenu.Content>
-                  </DropdownMenu.Root>
-                </Table.Cell>
-              </Table.Row>
-            ))}
-          </Table.Body>
-        </Table.Root>
-        <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
-      </Box>
-
-      <AddUserDialog open={addOpen} onClose={() => setAddOpen(false)} />
-      <EditUserDialog user={editingUser} onClose={() => setEditingUser(null)} />
+      <DataTable
+        data={data ?? []}
+        columns={columns}
+        getSearchText={getSearchText}
+        onEdit={user => setDialog({ open: true, user })}
+        onDelete={setConfirmDelete}
+        onAdd={() => setDialog({ open: true, user: null })}
+        addLabel="Add user"
+        entityLabel="user"
+        searchPlaceholder="Search by name..."
+        emptyMessage="No users yet"
+        paramPrefix={TABLE_PARAMS.users}
+      />
+      <ConfirmDeleteDialog
+        open={confirmDelete !== null}
+        onOpenChange={open => { if (!open) setConfirmDelete(null) }}
+        title="Delete user"
+        description={<>Are you sure? The user <Text weight="bold">{confirmDelete?.first} {confirmDelete?.last}</Text> will be permanently deleted.</>}
+        confirmLabel="Delete user"
+        onConfirm={() => { if (confirmDelete) { handleDelete(confirmDelete); setConfirmDelete(null) } }}
+      />
+      <UserDialog
+        open={dialog.open}
+        user={dialog.user}
+        onClose={() => setDialog({ open: false, user: null })}
+      />
     </>
   )
 }

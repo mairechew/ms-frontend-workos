@@ -1,19 +1,22 @@
+import { useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { fetchAllPages, apiFetch } from '../../../lib/api'
+import { UNDO_DELAY, STALE_TIME } from '../../../lib/constants'
 import type { Role } from '../../../types/api'
 
 export function useRoles() {
   const queryClient = useQueryClient()
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['roles'] })
+  const invalidate = useCallback(() => queryClient.invalidateQueries({ queryKey: ['roles'] }), [queryClient])
 
   const query = useQuery({
     queryKey: ['roles'],
     queryFn: () => fetchAllPages<Role>('/roles', 'Failed to fetch roles'),
+    staleTime: STALE_TIME,
   })
 
   const addRole = useMutation({
     mutationFn: (body: { name: string; description: string; isDefault: boolean }) =>
-      apiFetch('/roles', { method: 'POST', body: JSON.stringify(body) }),
+      apiFetch<Role>('/roles', { method: 'POST', body: JSON.stringify(body) }),
     onSuccess: invalidate,
   })
 
@@ -23,20 +26,29 @@ export function useRoles() {
     onSuccess: invalidate,
   })
 
-  const deleteRole = useMutation({
-    mutationFn: (id: string) => apiFetch(`/roles/${id}`, { method: 'DELETE' }),
-    onMutate: async (id) => {
-      await queryClient.cancelQueries({ queryKey: ['roles'] })
-      const previous = queryClient.getQueryData<Role[]>(['roles'])
-      // optimistic delete - maybe add some sort of shimmer?
-      queryClient.setQueryData<Role[]>(['roles'], old => old?.filter(r => r.id !== id) ?? [])
-      return { previous }
-    },
-    onError: (_err, _id, context) => {
-      if (context?.previous) queryClient.setQueryData(['roles'], context.previous)
-    },
-    onSettled: invalidate,
-  })
+  const scheduleDelete = useCallback((id: string, onError?: () => void): (() => void) => {
+    queryClient.cancelQueries({ queryKey: ['roles'] })
+    const previous = queryClient.getQueryData<Role[]>(['roles'])
+    queryClient.setQueryData<Role[]>(['roles'], old => old?.filter(r => r.id !== id) ?? [])
 
-  return { ...query, addRole, editRole, deleteRole }
+    let cancelled = false
+    const timer = setTimeout(async () => {
+      if (cancelled) return
+      try {
+        await apiFetch(`/roles/${id}`, { method: 'DELETE' })
+        queryClient.invalidateQueries({ queryKey: ['roles'] })
+      } catch {
+        if (previous) queryClient.setQueryData(['roles'], previous)
+        onError?.()
+      }
+    }, UNDO_DELAY)
+
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+      if (previous) queryClient.setQueryData(['roles'], previous)
+    }
+  }, [queryClient])
+
+  return { ...query, addRole, editRole, scheduleDelete }
 }

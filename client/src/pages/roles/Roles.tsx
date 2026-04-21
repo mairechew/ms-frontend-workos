@@ -1,42 +1,56 @@
-import { useEffect, useMemo, useState } from 'react'
-import {
-  Table, Badge, Flex, Text, Spinner, Callout,
-  Button, TextField, DropdownMenu, IconButton, Box,
-} from '@radix-ui/themes'
-import { PlusIcon, DotsHorizontalIcon, MagnifyingGlassIcon } from '@radix-ui/react-icons'
+import { useCallback, useMemo, useState } from 'react'
+import { Flex, Spinner, Callout, Text, Badge } from '@radix-ui/themes'
 import { useRoles } from './hooks/useRoles'
-import AddRoleDialog from './components/AddRoleDialog'
-import EditRoleDialog from './components/EditRoleDialog'
-import Pagination from '../../components/Pagination'
+import { useToast } from '../../components/ToastProvider'
+import DataTable, { type Column } from '../../components/DataTable'
+import ConfirmDeleteDialog from '../../components/ConfirmDeleteDialog'
+import { TABLE_PARAMS } from '../../lib/constants'
+import RoleDialog from './components/RoleDialog'
 import type { Role } from '../../types/api'
 
-const PAGE_SIZE = 10
+export default function Roles() {
+  const { data, isLoading, isError, scheduleDelete } = useRoles()
+  const showToast = useToast()
+  const [dialog, setDialog] = useState<{ open: boolean; role: Role | null }>({ open: false, role: null })
+  const [confirmDelete, setConfirmDelete] = useState<Role | null>(null)
 
-interface Props {
-  compact: boolean
-}
+  const getSearchText = useCallback((r: Role) => `${r.name} ${r.description ?? ''}`, [])
 
-export default function Roles({ compact }: Props) {
-  const { data, isLoading, isError, deleteRole } = useRoles()
+  const handleDelete = (role: Role) => {
+    const undo = scheduleDelete(role.id, () => {
+      showToast({ title: `Could not delete "${role.name}"` })
+    })
+    showToast({
+      title: `"${role.name}" deleted`,
+      action: { label: 'Undo', onClick: undo },
+    })
+  }
 
-  const [search, setSearch] = useState('')
-  const [page, setPage] = useState(1)
-  const [addOpen, setAddOpen] = useState(false)
-  const [editingRole, setEditingRole] = useState<Role | null>(null)
-
-  useEffect(() => setPage(1), [search])
-
-  const filtered = useMemo(() => {
-    if (!data) return []
-    const q = search.toLowerCase()
-    if (!q) return data
-    return data.filter(
-      r => r.name.toLowerCase().includes(q) || (r.description?.toLowerCase().includes(q) ?? false)
-    )
-  }, [data, search])
-
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
-  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const columns = useMemo<Column<Role>[]>(() => [
+    {
+      label: 'Role',
+      sortKey: 'name',
+      sortValue: r => r.name,
+      render: r => (
+        <Flex align="center" gap="2">
+          <Text>{r.name}</Text>
+          {r.isDefault && <Badge color="green">Default</Badge>}
+        </Flex>
+      ),
+    },
+    {
+      label: 'Description',
+      sortKey: 'description',
+      sortValue: r => r.description ?? '',
+      render: r => <Text color="gray">{r.description ?? '—'}</Text>,
+    },
+    {
+      label: 'Created',
+      sortKey: 'created',
+      sortValue: r => r.createdAt,
+      render: r => new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+    },
+  ], [])
 
   if (isLoading) return <Flex justify="center" p="8"><Spinner size="3" /></Flex>
   if (isError) return (
@@ -47,81 +61,33 @@ export default function Roles({ compact }: Props) {
 
   return (
     <>
-      <Flex gap="3" align="center" mt="4" mb="4">
-        <TextField.Root
-          placeholder="Search by name or description..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          style={{ flex: 1 }}
-        >
-          <TextField.Slot>
-            <MagnifyingGlassIcon />
-          </TextField.Slot>
-        </TextField.Root>
-        <Button onClick={() => setAddOpen(true)}>
-          <PlusIcon /> Add role
-        </Button>
-      </Flex>
-
-      <Box style={{ border: '1px solid var(--gray-a5)', borderRadius: 'var(--radius-3)', overflow: 'hidden' }}>
-        <Table.Root size={compact ? '1' : '2'}>
-          <Table.Header>
-            <Table.Row>
-              <Table.ColumnHeaderCell>Role</Table.ColumnHeaderCell>
-              <Table.ColumnHeaderCell>Description</Table.ColumnHeaderCell>
-              <Table.ColumnHeaderCell>Created</Table.ColumnHeaderCell>
-              <Table.ColumnHeaderCell />
-            </Table.Row>
-          </Table.Header>
-          <Table.Body>
-            {paginated.length === 0 && (
-              <Table.Row>
-                <Table.Cell colSpan={4}>
-                  <Flex justify="center" py="8">
-                    <Text color="gray" size="2">
-                      {search ? `No roles match "${search}"` : 'No roles yet'}
-                    </Text>
-                  </Flex>
-                </Table.Cell>
-              </Table.Row>
-            )}
-            {paginated.map(role => (
-              <Table.Row key={role.id}>
-                <Table.Cell>
-                  <Flex align="center" gap="2">
-                    <Text>{role.name}</Text>
-                    {role.isDefault && <Badge color="green">Default</Badge>}
-                  </Flex>
-                </Table.Cell>
-                <Table.Cell>
-                  <Text color="gray">{role.description ?? '—'}</Text>
-                </Table.Cell>
-                <Table.Cell>{new Date(role.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</Table.Cell>
-                <Table.Cell justify="end">
-                  <DropdownMenu.Root>
-                    <DropdownMenu.Trigger>
-                      <IconButton variant="ghost" color="gray" size="1" aria-label="More options">
-                        <DotsHorizontalIcon />
-                      </IconButton>
-                    </DropdownMenu.Trigger>
-                    <DropdownMenu.Content align="end">
-                      <DropdownMenu.Item onClick={() => setEditingRole(role)}>Edit role</DropdownMenu.Item>
-                      <DropdownMenu.Separator />
-                      <DropdownMenu.Item color="red" disabled={role.isDefault} onClick={() => deleteRole.mutate(role.id)}>
-                        Delete role
-                      </DropdownMenu.Item>
-                    </DropdownMenu.Content>
-                  </DropdownMenu.Root>
-                </Table.Cell>
-              </Table.Row>
-            ))}
-          </Table.Body>
-        </Table.Root>
-        <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
-      </Box>
-
-      <AddRoleDialog open={addOpen} onClose={() => setAddOpen(false)} />
-      <EditRoleDialog role={editingRole} onClose={() => setEditingRole(null)} />
+      <DataTable
+        data={data ?? []}
+        columns={columns}
+        getSearchText={getSearchText}
+        onEdit={role => setDialog({ open: true, role })}
+        onDelete={setConfirmDelete}
+        canDelete={r => !r.isDefault}
+        onAdd={() => setDialog({ open: true, role: null })}
+        addLabel="Add role"
+        entityLabel="role"
+        searchPlaceholder="Search by name or description..."
+        emptyMessage="No roles yet"
+        paramPrefix={TABLE_PARAMS.roles}
+      />
+      <ConfirmDeleteDialog
+        open={confirmDelete !== null}
+        onOpenChange={open => { if (!open) setConfirmDelete(null) }}
+        title="Delete role"
+        description={<>Are you sure? The role <Text weight="bold">{confirmDelete?.name}</Text> will be permanently deleted.</>}
+        confirmLabel="Delete role"
+        onConfirm={() => { if (confirmDelete) { handleDelete(confirmDelete); setConfirmDelete(null) } }}
+      />
+      <RoleDialog
+        open={dialog.open}
+        role={dialog.role}
+        onClose={() => setDialog({ open: false, role: null })}
+      />
     </>
   )
 }

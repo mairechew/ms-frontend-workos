@@ -15,12 +15,12 @@ export default function Pagination({ page, totalPages, onPageChange }: Props) {
       gap="2"
       px="4"
       py="3"
-      style={{ borderTop: '1px solid var(--gray-a5)' }}
+      style={{ borderTop: 'var(--border-subtle)' }}
     >
       <Button variant="soft" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>
         Previous
       </Button>
-      <Button disabled={page >= totalPages} onClick={() => onPageChange(page + 1)}>
+      <Button variant="outline" color="gray" highContrast disabled={page >= totalPages} onClick={() => onPageChange(page + 1)} style={{ fontWeight: 'bold' }}>
         Next
       </Button>
     </Flex>

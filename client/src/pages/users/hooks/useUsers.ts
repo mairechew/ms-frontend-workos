@@ -1,14 +1,17 @@
+import { useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { fetchAllPages, apiFetch } from '../../../lib/api'
+import { UNDO_DELAY, STALE_TIME } from '../../../lib/constants'
 import type { User } from '../../../types/api'
 
 export function useUsers() {
   const queryClient = useQueryClient()
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['users'] })
+  const invalidate = useCallback(() => queryClient.invalidateQueries({ queryKey: ['users'] }), [queryClient])
 
   const query = useQuery({
     queryKey: ['users'],
     queryFn: () => fetchAllPages<User>('/users', 'Failed to fetch users'),
+    staleTime: STALE_TIME,
   })
 
   const addUser = useMutation({
@@ -23,21 +26,29 @@ export function useUsers() {
     onSuccess: invalidate,
   })
 
-  const deleteUser = useMutation({
-    mutationFn: (id: string) => apiFetch(`/users/${id}`, { method: 'DELETE' }),
+  const scheduleDelete = useCallback((id: string, onError?: () => void): (() => void) => {
+    queryClient.cancelQueries({ queryKey: ['users'] })
+    const previous = queryClient.getQueryData<User[]>(['users'])
+    queryClient.setQueryData<User[]>(['users'], old => old?.filter(u => u.id !== id) ?? [])
 
-    onMutate: async (id) => {
-      await queryClient.cancelQueries({ queryKey: ['users'] })
-      const previous = queryClient.getQueryData<User[]>(['users'])
-      // optimistic delete
-      queryClient.setQueryData<User[]>(['users'], old => old?.filter(u => u.id !== id) ?? [])
-      return { previous }
-    },
-    onError: (_err, _id, context) => {
-      if (context?.previous) queryClient.setQueryData(['users'], context.previous)
-    },
-    onSettled: invalidate,
-  })
+    let cancelled = false
+    const timer = setTimeout(async () => {
+      if (cancelled) return
+      try {
+        await apiFetch(`/users/${id}`, { method: 'DELETE' })
+        queryClient.invalidateQueries({ queryKey: ['users'] })
+      } catch {
+        if (previous) queryClient.setQueryData(['users'], previous)
+        onError?.()
+      }
+    }, UNDO_DELAY)
 
-  return { ...query, addUser, editUser, deleteUser }
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+      if (previous) queryClient.setQueryData(['users'], previous)
+    }
+  }, [queryClient])
+
+  return { ...query, addUser, editUser, scheduleDelete }
 }
