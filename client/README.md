@@ -101,6 +101,7 @@ Brand colors and component tokens live in `src/theme.css`.
 
 ## Delightful Additions
 
+- **Skeleton loading** — shimmer table with real column headers while data fetches, no layout shift on load
 - **Compact density toggle** — icon button in the table header switches between comfortable and dense row height
 - **Optimistic delete with undo** — instant feedback, reversible within 5 seconds via toast action
 - **Dark mode** — persists to localStorage, respects system preference on first load
@@ -130,9 +131,14 @@ Component-level behaviour (form validation, dialog open/close, search filtering)
 
 ---
 
+## AI Collaboration
+
+The engineering standards and context used throughout are in `claude.md` at the root of the repo.
+
+---
+
 ## Potential Wish List (if more time)
 
-- **Skeleton loading states** — swap the spinner for a shimmer table using Radix's `Skeleton` component; one skeleton row component repeated N times gives a much more polished loading experience with minimal code
 - **Keyboard shortcut to open Add dialog** — a single `useEffect` listening for `n` keydown opens the Add user/role dialog; small touch but could be useful for power users
 - **Optimistic add/edit** — currently only delete is optimistic; adds and edits wait for the server response
 - **E2E tests** — Playwright covering the critical paths (add user, assign role, delete with undo)

@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Flex, Spinner, Callout, Avatar, Text } from '@radix-ui/themes'
+import { Flex, Callout, Avatar, Text } from '@radix-ui/themes'
 import { useUsers } from './hooks/useUsers'
 import { useRoles } from '../roles/hooks/useRoles'
 import { useToast } from '../../components/ToastProvider'
@@ -56,7 +56,6 @@ export default function Users() {
     },
   ], [roleMap])
 
-  if (isLoading) return <Flex justify="center" p="8"><Spinner size="3" /></Flex>
   if (isError) return (
     <Callout.Root color="red" mt="4">
       <Callout.Text>Failed to load users. Please try again.</Callout.Text>
@@ -68,6 +67,7 @@ export default function Users() {
       <DataTable
         data={data ?? []}
         columns={columns}
+        isLoading={isLoading}
         getSearchText={getSearchText}
         onEdit={user => setDialog({ open: true, user })}
         onDelete={setConfirmDelete}

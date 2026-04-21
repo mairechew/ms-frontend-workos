@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Flex, Spinner, Callout, Text, Badge } from '@radix-ui/themes'
+import { Callout, Text, Badge } from '@radix-ui/themes'
 import { useRoles } from './hooks/useRoles'
 import { useToast } from '../../components/ToastProvider'
 import DataTable, { type Column } from '../../components/DataTable'
@@ -52,7 +52,6 @@ export default function Roles() {
     },
   ], [])
 
-  if (isLoading) return <Flex justify="center" p="8"><Spinner size="3" /></Flex>
   if (isError) return (
     <Callout.Root color="red" mt="4">
       <Callout.Text>Failed to load roles. Please try again.</Callout.Text>
@@ -64,6 +63,7 @@ export default function Roles() {
       <DataTable
         data={data ?? []}
         columns={columns}
+        isLoading={isLoading}
         getSearchText={getSearchText}
         onEdit={role => setDialog({ open: true, role })}
         onDelete={setConfirmDelete}

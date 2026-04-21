@@ -1,9 +1,8 @@
 import { useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import {
   Table, Flex, Text, Button, TextField,
-  DropdownMenu, IconButton, Box,
+  DropdownMenu, IconButton, Box, Skeleton,
 } from '@radix-ui/themes'
 import {
   PlusIcon, DotsHorizontalIcon, MagnifyingGlassIcon,
@@ -11,6 +10,7 @@ import {
   DashboardIcon, HamburgerMenuIcon,
 } from '@radix-ui/react-icons'
 import Pagination from './Pagination'
+import { useTableParams, type Sort } from '../hooks/useTableParams'
 
 export interface Column<T> {
   label: string
@@ -32,10 +32,8 @@ interface Props<T extends { id: string }> {
   emptyMessage?: string
   canDelete?: (item: T) => boolean
   paramPrefix: string
+  isLoading?: boolean
 }
-
-type SortDir = 'asc' | 'desc'
-type Sort = { key: string; dir: SortDir } | null
 
 const PAGE_SIZE = 10
 
@@ -48,60 +46,10 @@ export default function DataTable<T extends { id: string }>({
   data, columns, getSearchText,
   onEdit, onDelete, onAdd, addLabel, entityLabel,
   searchPlaceholder = 'Search...', emptyMessage = 'No items yet',
-  canDelete = () => true, paramPrefix,
+  canDelete = () => true, paramPrefix, isLoading = false,
 }: Props<T>) {
-  const [searchParams, setSearchParams] = useSearchParams()
+  const { search, sort, page, setSearch, handleSort, setPage } = useTableParams(paramPrefix)
   const [compact, setCompact] = useState(false)
-
-  const qKey = `${paramPrefix}_q`
-  const sortKey = `${paramPrefix}_sort`
-  const dirKey = `${paramPrefix}_dir`
-  const pageKey = `${paramPrefix}_page`
-
-  const search = searchParams.get(qKey) ?? ''
-  const sortField = searchParams.get(sortKey)
-  const sortDir = searchParams.get(dirKey) as SortDir | null
-  const sort: Sort = sortField && sortDir ? { key: sortField, dir: sortDir } : null
-  const page = Math.max(1, parseInt(searchParams.get(pageKey) ?? '1', 10))
-
-  const setSearch = (q: string) => {
-    setSearchParams(prev => {
-      const next = new URLSearchParams(prev)
-      if (q) next.set(qKey, q)
-      else next.delete(qKey)
-      next.delete(pageKey)
-      return next
-    }, { replace: true })
-  }
-
-  const handleSort = (key: string) => {
-    setSearchParams(prev => {
-      const next = new URLSearchParams(prev)
-      const prevKey = next.get(sortKey)
-      const prevDir = next.get(dirKey) as SortDir | null
-
-      if (!prevKey || prevKey !== key) {
-        next.set(sortKey, key)
-        next.set(dirKey, 'asc')
-      } else if (prevDir === 'asc') {
-        next.set(dirKey, 'desc')
-      } else {
-        next.delete(sortKey)
-        next.delete(dirKey)
-      }
-      next.delete(pageKey)
-      return next
-    })
-  }
-
-  const setPage = (p: number) => {
-    setSearchParams(prev => {
-      const next = new URLSearchParams(prev)
-      if (p === 1) next.delete(pageKey)
-      else next.set(pageKey, String(p))
-      return next
-    })
-  }
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
@@ -123,6 +71,39 @@ export default function DataTable<T extends { id: string }>({
 
   const totalPages = Math.ceil(sorted.length / PAGE_SIZE)
   const paginated = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+
+  if (isLoading) {
+    return (
+      <>
+        <Flex gap="2" align="center" mt="5" mb="5">
+          <Skeleton height="32px" style={{ flex: 1 }} />
+          <Skeleton height="32px" width="120px" />
+        </Flex>
+        <Box style={{ border: 'var(--border-subtle)', borderRadius: 'var(--radius-3)', overflow: 'hidden' }}>
+          <Table.Root size="2">
+            <Table.Header style={{ background: 'var(--table-header-bg)' }}>
+              <Table.Row>
+                {columns.map(col => (
+                  <Table.ColumnHeaderCell key={col.label}>{col.label}</Table.ColumnHeaderCell>
+                ))}
+                <Table.ColumnHeaderCell />
+              </Table.Row>
+            </Table.Header>
+            <Table.Body>
+              {Array.from({ length: 8 }, (_, i) => (
+                <Table.Row key={i}>
+                  {columns.map(col => (
+                    <Table.Cell key={col.label}><Skeleton height="20px" /></Table.Cell>
+                  ))}
+                  <Table.Cell />
+                </Table.Row>
+              ))}
+            </Table.Body>
+          </Table.Root>
+        </Box>
+      </>
+    )
+  }
 
   return (
     <>
