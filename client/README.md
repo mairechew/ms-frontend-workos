@@ -135,10 +135,3 @@ Component-level behaviour (form validation, dialog open/close, search filtering)
 
 The engineering standards and context used throughout are in `claude.md` at the root of the repo.
 
----
-
-## Potential Wish List (if more time)
-
-- **Keyboard shortcut to open Add dialog** — a single `useEffect` listening for `n` keydown opens the Add user/role dialog; small touch but could be useful for power users
-- **Optimistic add/edit** — currently only delete is optimistic; adds and edits wait for the server response
-- **E2E tests** — Playwright covering the critical paths (add user, assign role, delete with undo)

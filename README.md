@@ -31,4 +31,4 @@ Runs at `http://localhost:5173`.
 
 ## Client Documentation
 
-See [`client/README.md`](./client/README.md) for architecture notes, tech stack, and testing details.
+See [`client/README.md`](client/README.md) for architecture notes, tech stack, and testing details.
