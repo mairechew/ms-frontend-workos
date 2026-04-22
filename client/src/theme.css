@@ -1,7 +1,7 @@
 :root {
   --border-subtle: 1px solid var(--gray-a5);
   --table-header-bg: #F9F9FB;
-  --dialog-max-width: 480px;
+  --dialog-max-width: 488px;
   --toast-min-width: 280px;
 
   /* keep in sync with src/lib/constants.ts Z */
